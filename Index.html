@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Smart Receipt Tracker</title>
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#2563eb" />
+  <link rel="apple-touch-icon" href="icon-192.png" />
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <style>
+    :root {
+      --primary: #2563eb;
+      --bg: #f8fafc;
+      --card: #ffffff;
+      --text: #0f172a;
+      --border: #e2e8f0;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      margin: 0;
+      padding: 16px;
+    }
+    .header {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    .header h1 {
+      margin: 0;
+      font-size: 1.5rem;
+      color: var(--primary);
+    }
+    .card {
+      background: var(--card);
+      padding: 16px;
+      border-radius: 12px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      margin-bottom: 20px;
+    }
+    .actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .btn {
+      flex: 1;
+      background: var(--primary);
+      color: white;
+      padding: 12px;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      text-align: center;
+      cursor: pointer;
+    }
+    .btn-secondary {
+      background: #475569;
+    }
+    input[type="file"] {
+      display: none;
+    }
+    #status {
+      margin-top: 10px;
+      font-size: 0.85rem;
+      color: #64748b;
+      min-height: 20px;
+    }
+    .table-container {
+      overflow-x: auto;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 600px;
+    }
+    th, td {
+      border: 1px solid var(--border);
+      padding: 10px;
+      text-align: right;
+      font-size: 0.85rem;
+    }
+    th {
+      background: #f1f5f9;
+      font-weight: 600;
+    }
+    th:first-child, td:first-child {
+      text-align: left;
+    }
+    tr.totals-row {
+      background: #e2e8f0;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <h1>Smart Receipt Tracker</h1>
+    <p style="font-size: 0.85rem; color: #64748b; margin-top: 4px;">
+      Upload photos or screenshots of your receipts
+    </p>
+  </div>
+
+  <div class="card">
+    <div class="actions">
+      <button class="btn" onclick="document.getElementById('cameraInput').click()">📷 Take Photo / Scan</button>
+      <button class="btn btn-secondary" onclick="document.getElementById('fileInput').click()">🖼️ Upload Screenshot</button>
+    </div>
+
+    <!-- Inputs -->
+    <input type="file" id="cameraInput" accept="image/*" capture="environment" onchange="processImage(this.files[0])" />
+    <input type="file" id="fileInput" accept="image/*" onchange="processImage(this.files[0])" />
+
+    <div id="status">Ready to scan.</div>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-top:0;">Expense Summary Table</h3>
+    <div class="table-container">
+      <table id="expenseTable">
+        <thead>
+          <tr>
+            <th>Date / Ref</th>
+            <th>Grocery</th>
+            <th>Gasoline</th>
+            <th>Home Maint.</th>
+            <th>Garden</th>
+            <th>Restaurant</th>
+            <th>Other</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody">
+          <!-- Rows will be added dynamically -->
+        </tbody>
+        <tfoot>
+          <tr class="totals-row" id="totalsRow">
+            <td>Total</td>
+            <td id="tot-Grocery">$0.00</td>
+            <td id="tot-Gasoline">$0.00</td>
+            <td id="tot-HomeMaint">$0.00</td>
+            <td id="tot-Garden">$0.00</td>
+            <td id="tot-Restaurant">$0.00</td>
+            <td id="tot-Other">$0.00</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    const categories = ['Grocery', 'Gasoline', 'HomeMaint', 'Garden', 'Restaurant', 'Other'];
+    let expenses = [];
+
+    // Register Service Worker for PWA installation
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js').catch(err => console.log('SW registration failed:', err));
+    }
+
+    async function processImage(file) {
+      if (!file) return;
+      
+      const status = document.getElementById('status');
+      status.innerText = "Analyzing receipt text... Please wait.";
+
+      try {
+        // Run OCR on the uploaded receipt photo/screenshot
+        const worker = await Tesseract.createWorker('eng');
+        const ret = await worker.recognize(file);
+        await worker.terminate();
+
+        const text = ret.data.text;
+        status.innerText = "Categorizing and calculating...";
+
+        const result = analyzeReceiptText(text);
+        
+        // Add parsed receipt to list
+        expenses.push(result);
+        updateTable();
+
+        status.innerText = `Added receipt (${result.category}: $${result.amount.toFixed(2)})`;
+      } catch (err) {
+        console.error(err);
+        status.innerText = "Error analyzing image. Please try again with a clearer photo.";
+      }
+    }
+
+    function analyzeReceiptText(text) {
+      const lower = text.toLowerCase();
+
+      // 1. Extract maximum price pattern found (likely total amount)
+      const amounts = text.match(/\d+[\.,]\d{2}/g) || [];
+      let maxAmount = 0.0;
+      amounts.forEach(amt => {
+        const val = parseFloat(amt.replace(',', '.'));
+        if (val > maxAmount && val < 5000) { // filter out random large numbers like barcode IDs
+          maxAmount = val;
+        }
+      });
+
+      // 2. Classify based on key business keywords
+      let category = 'Other';
+
+      if (lower.includes('gas') || lower.includes('fuel') || lower.includes('shell') || lower.includes('pioneer') || lower.includes('esso') || lower.includes('petro') || lower.includes('pump')) {
+        category = 'Gasoline';
+      } else if (lower.includes('garden') || lower.includes('nursery') || lower.includes('plant') || lower.includes('mulch') || lower.includes('soil')) {
+        category = 'Garden';
+      } else if (lower.includes('depot') || lower.includes('hardware') || lower.includes('plumb') || lower.includes('repair') || lower.includes('maintenance')) {
+        category = 'HomeMaint';
+      } else if (lower.includes('market') || lower.includes('grocery') || lower.includes('supermarket') || lower.includes('food') || lower.includes('walmart') || lower.includes('costco') || lower.includes('metro') || lower.includes('fresh')) {
+        category = 'Grocery';
+      } else if (lower.includes('cafe') || lower.includes('restaurant') || lower.includes('dine') || lower.includes('burger') || lower.includes('pizza') || lower.includes('coffee') || lower.includes('bistro')) {
+        category = 'Restaurant';
+      }
+
+      const dateStr = new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+
+      return {
+        ref: `${dateStr} #${expenses.length + 1}`,
+        category: category,
+        amount: maxAmount
+      };
+    }
+
+    function updateTable() {
+      const tbody = document.getElementById('tableBody');
+      tbody.innerHTML = '';
+
+      let totals = { Grocery: 0, Gasoline: 0, HomeMaint: 0, Garden: 0, Restaurant: 0, Other: 0 };
+
+      expenses.forEach(item => {
+        const tr = document.createElement('tr');
+        
+        // Ref cell
+        let html = `<td>${item.ref}</td>`;
+
+        // Category columns
+        categories.forEach(cat => {
+          if (cat === item.category) {
+            html += `<td>$${item.amount.toFixed(2)}</td>`;
+            totals[cat] += item.amount;
+          } else {
+            html += `<td>-</td>`;
+          }
+        });
+
+        tr.innerHTML = html;
+        tbody.appendChild(tr);
+      });
+
+      // Update total row
+      categories.forEach(cat => {
+        document.getElementById(`tot-${cat}`).innerText = `$${totals[cat].toFixed(2)}`;
+      });
+    }
+  </script>
+</body>
+</html>
