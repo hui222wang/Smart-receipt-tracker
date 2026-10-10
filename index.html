@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Smart Receipt Tracker PWA</title>
+  <link rel="manifest" href="manifest.json">
+  <style>
+    :root {
+      --primary: #2563eb;
+      --bg: #f8fafc;
+      --card-bg: #ffffff;
+      --text: #0f172a;
+      --border: #e2e8f0;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      margin: 0;
+      padding: 16px;
+      background: var(--bg);
+      color: var(--text);
+    }
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+    }
+    h1 {
+      font-size: 1.5rem;
+      margin-bottom: 16px;
+      text-align: center;
+    }
+    .action-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .btn {
+      flex: 1;
+      min-width: 80px;
+      padding: 12px;
+      border: none;
+      border-radius: 8px;
+      background: var(--primary);
+      color: white;
+      font-weight: bold;
+      font-size: 0.9rem;
+      cursor: pointer;
+      text-align: center;
+    }
+    .btn-secondary { background: #64748b; }
+    .btn-danger { background: #ef4444; }
+    .btn-success { background: #10b981; }
+    .api-key-section {
+      background: var(--card-bg);
+      padding: 12px;
+      border-radius: 8px;
+      margin-bottom: 16px;
+      border: 1px solid var(--border);
+    }
+    .api-key-section input {
+      width: 100%;
+      padding: 8px;
+      box-sizing: border-box;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      margin-top: 6px;
+    }
+    .table-container {
+      overflow-x: auto;
+      background: var(--card-bg);
+      border-radius: 8px;
+      border: 1px solid var(--border);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 0.85rem;
+    }
+    th, td {
+      padding: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    th {
+      background: #f1f5f9;
+    }
+    tfoot td {
+      font-weight: bold;
+      background: #f8fafc;
+      border-top: 2px solid var(--border);
+    }
+    .status {
+      margin-top: 10px;
+      font-size: 0.85rem;
+      color: #64748b;
+      text-align: center;
+    }
+    input[type="file"] { display: none; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Receipt Tracker PWA</h1>
+
+    <div class="api-key-section">
+      <label for="apiKey"><strong>Gemini API Key:</strong></label>
+      <input type="password" id="apiKey" placeholder="Enter your Gemini API key here">
+    </div>
+
+    <div class="action-bar">
+      <button class="btn btn-success" onclick="document.getElementById('cameraInput').click()">📸 Camera</button>
+      <button class="btn btn-primary" onclick="document.getElementById('albumInput').click()">🖼️ Album</button>
+      <input type="file" id="cameraInput" accept="image/*" capture="environment" onchange="processReceipts(this.files)">
+      <input type="file" id="albumInput" accept="image/*" multiple onchange="processReceipts(this.files)">
+    </div>
+
+    <div class="action-bar">
+      <button class="btn btn-secondary" onclick="newSession()">New</button>
+      <button class="btn btn-secondary" onclick="openBackup()">Open</button>
+      <button class="btn btn-secondary" onclick="saveBackup()">Save</button>
+      <button class="btn btn-danger" onclick="closeApp()">Close</button>
+      <input type="file" id="openFileInput" accept=".json" onchange="loadBackupFile(this.files[0])">
+    </div>
+
+    <div id="status" class="status">Ready</div>
+
+    <div class="table-container" style="margin-top: 16px;">
+      <table>
+        <thead>
+          <tr>
+            <th>Txn Date</th>
+            <th>Merchant</th>
+            <th>Gasoline</th>
+            <th>Home Maint</th>
+            <th>Medicine</th>
+            <th>Transit</th>
+            <th>Other</th>
+          </tr>
+        </thead>
+        <tbody id="ledgerBody">
+        </tbody>
+        <tfoot>
+          <tr>
+            <td colspan="2">TOTAL</td>
+            <td id="sumGas">$0.00</td>
+            <td id="sumHome">$0.00</td>
+            <td id="sumMed">$0.00</td>
+            <td id="sumTransit">$0.00</td>
+            <td id="sumOther">$0.00</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    let receipts = [];
+
+    window.onload = () => {
+      const savedKey = localStorage.getItem('gemini_api_key');
+      if (savedKey) document.getElementById('apiKey').value = savedKey;
+      const savedData = localStorage.getItem('receipt_ledger');
+      if (savedData) {
+        receipts = JSON.parse(savedData);
+        renderTable();
+      }
+    };
+
+    document.getElementById('apiKey').addEventListener('change', (e) => {
+      localStorage.setItem('gemini_api_key', e.target.value.trim());
+    });
+
+    async function processReceipts(files) {
+      if (!files || files.length === 0) return;
+      const apiKey = document.getElementById('apiKey').value.trim();
+      if (!apiKey) {
+        alert("Please enter your Gemini API Key first.");
+        return;
+      }
+
+      const status = document.getElementById('status');
+      
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        status.innerText = `Analyzing receipt ${i + 1} of ${files.length}...`;
+
+        try {
+          const base64Data = await fileToBase64(file);
+          const parsedData = await analyzeWithGemini(apiKey, base64Data);
+
+          if (!parsedData || parsedData.amount === null || parsedData.amount === undefined) {
+            alert(`Could not extract total amount from ${file.name}`);
+            continue;
+          }
+
+          // Duplicate check
+          const isDuplicate = receipts.some(r => 
+            r.date === parsedData.date && 
+            Math.abs(r.amount - parsedData.amount) < 0.01 &&
+            r.merchant.toLowerCase() === parsedData.merchant.toLowerCase()
+          );
+
+          if (isDuplicate) {
+            alert(`Duplicate receipt detected for ${parsedData.merchant} on ${parsedData.date} ($${parsedData.amount}). Skipped.`);
+            continue;
+          }
+
+          receipts.push(parsedData);
+          saveToLocalStorage();
+          renderTable();
+        } catch (err) {
+          console.error(err);
+          alert(`Error processing receipt ${file.name}: ` + err.message);
+        }
+      }
+      status.innerText = "Processing complete.";
+    }
+
+    function fileToBase64(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result.split(',')[1]);
+        reader.onerror = error => reject(error);
+        reader.readAsDataURL(file);
+      });
+    }
+
+    async function analyzeWithGemini(apiKey, base64Image) {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+      const prompt = `Analyze this receipt image. Locate the transaction date (format YYYY-MM-DD), merchant name, and the exact amount right next to the word TOTAL. Categorize into one of: "Gasoline", "Home Maintenance", "Medicine Purchase", "Public Transit", or "Other". Respond STRICTLY in raw JSON format with key names: "date", "merchant", "category", "amount". Do not use markdown blocks. Example: {"date":"2026-10-09","merchant":"Shell","category":"Gasoline","amount":45.50}`;
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{
+            parts: [
+              { text: prompt },
+              { inline_data: { mime_type: "image/jpeg", data: base64Image } }
+            ]
+          }]
+        })
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error?.message || "Gemini API error");
+
+      let text = data.candidates[0].content.parts[0].text.trim();
+      text = text.replace(/```json/g, '').replace(/```/g, '').trim();
+      return JSON.parse(text);
+    }
+
+    function renderTable() {
+      const tbody = document.getElementById('ledgerBody');
+      tbody.innerHTML = '';
+
+      let totals = { Gasoline: 0, "Home Maintenance": 0, "Medicine Purchase": 0, "Public Transit": 0, Other: 0 };
+
+      receipts.forEach(item => {
+        const tr = document.createElement('tr');
+        const amt = parseFloat(item.amount) || 0;
+        
+        totals[item.category] = (totals[item.category] || 0) + amt;
+
+        tr.innerHTML = `
+          <td>${item.date || 'N/A'}</td>
+          <td>${item.merchant || 'Unknown'}</td>
+          <td>${item.category === 'Gasoline' ? '$' + amt.toFixed(2) : '-'}</td>
+          <td>${item.category === 'Home Maintenance' ? '$' + amt.toFixed(2) : '-'}</td>
+          <td>${item.category === 'Medicine Purchase' ? '$' + amt.toFixed(2) : '-'}</td>
+          <td>${item.category === 'Public Transit' ? '$' + amt.toFixed(2) : '-'}</td>
+          <td>${item.category === 'Other' ? '$' + amt.toFixed(2) : '-'}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      document.getElementById('sumGas').innerText = '$' + totals['Gasoline'].toFixed(2);
+      document.getElementById('sumHome').innerText = '$' + totals['Home Maintenance'].toFixed(2);
+      document.getElementById('sumMed').innerText = '$' + totals['Medicine Purchase'].toFixed(2);
+      document.getElementById('sumTransit').innerText = '$' + totals['Public Transit'].toFixed(2);
+      document.getElementById('sumOther').innerText = '$' + totals['Other'].toFixed(2);
+    }
+
+    function saveToLocalStorage() {
+      localStorage.setItem('receipt_ledger', JSON.stringify(receipts));
+    }
+
+    function newSession() {
+      if (confirm("Are you sure you want to clear current receipts and start a new session?")) {
+        receipts = [];
+        saveToLocalStorage();
+        renderTable();
+        document.getElementById('status').innerText = "Session cleared.";
+      }
+    }
+
+    function saveBackup() {
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(receipts, null, 2));
+      const downloadAnchor = document.createElement('a');
+      downloadAnchor.setAttribute("href", dataStr);
+      downloadAnchor.setAttribute("download", "receipt_backup.json");
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+    }
+
+    function openBackup() {
+      document.getElementById('openFileInput').click();
+    }
+
+    function loadBackupFile(file) {
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          receipts = JSON.parse(e.target.result);
+          saveToLocalStorage();
+          renderTable();
+          document.getElementById('status').innerText = "Backup loaded successfully.";
+        } catch (err) {
+          alert("Invalid backup JSON file.");
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    function closeApp() {
+      if (confirm("Are you sure you want to close this session?")) {
+        window.close();
+        document.getElementById('status').innerText = "Session closed. You can close this tab.";
+      }
+    }
+  </script>
+</body>
+</html>
