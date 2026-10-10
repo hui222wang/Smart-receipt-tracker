@@ -227,7 +227,7 @@
     }
 
     async function analyzeWithGemini(apiKey, base64Image) {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${apiKey}`;
       const prompt = `Analyze this receipt image. Locate the transaction date (format YYYY-MM-DD), merchant name, and the exact amount right next to the word TOTAL. Categorize into one of: "Gasoline", "Home Maintenance", "Medicine Purchase", "Public Transit", or "Other". Respond STRICTLY in raw JSON format with key names: "date", "merchant", "category", "amount". Do not use markdown blocks. Example: {"date":"2026-10-09","merchant":"Shell","category":"Gasoline","amount":45.50}`;
 
       const response = await fetch(url, {
