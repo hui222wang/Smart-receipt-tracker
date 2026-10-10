@@ -1,161 +1,3 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Smart Receipt Tracker PWA v1.3</title>
-  <link rel="manifest" href="manifest.json">
-  <style>
-    :root {
-      --primary: #2563eb;
-      --bg: #f8fafc;
-      --card-bg: #ffffff;
-      --text: #0f172a;
-      --border: #e2e8f0;
-    }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      margin: 0;
-      padding: 16px;
-      background: var(--bg);
-      color: var(--text);
-    }
-    .container {
-      max-width: 900px;
-      margin: 0 auto;
-    }
-    h1 {
-      font-size: 1.5rem;
-      margin-bottom: 16px;
-      text-align: center;
-    }
-    .action-bar {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      margin-bottom: 16px;
-    }
-    .btn {
-      flex: 1;
-      min-width: 80px;
-      padding: 12px;
-      border: none;
-      border-radius: 8px;
-      background: var(--primary);
-      color: white;
-      font-weight: bold;
-      font-size: 0.9rem;
-      cursor: pointer;
-      text-align: center;
-    }
-    .btn-secondary { background: #64748b; }
-    .btn-danger { background: #ef4444; }
-    .btn-success { background: #10b981; }
-    .btn-warning { background: #d97706; }
-    .api-key-section {
-      background: var(--card-bg);
-      padding: 12px;
-      border-radius: 8px;
-      margin-bottom: 16px;
-      border: 1px solid var(--border);
-    }
-    .api-key-section input {
-      width: 100%;
-      padding: 8px;
-      box-sizing: border-box;
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      margin-top: 6px;
-    }
-    .table-container {
-      overflow-x: auto;
-      background: var(--card-bg);
-      border-radius: 8px;
-      border: 1px solid var(--border);
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      text-align: left;
-      font-size: 0.85rem;
-    }
-    th, td {
-      padding: 10px;
-      border-bottom: 1px solid var(--border);
-    }
-    th {
-      background: #f1f5f9;
-    }
-    tfoot td {
-      font-weight: bold;
-      background: #f8fafc;
-      border-top: 2px solid var(--border);
-    }
-    .status {
-      margin-top: 10px;
-      font-size: 0.85rem;
-      color: #64748b;
-      text-align: center;
-    }
-    input[type="file"] { display: none; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <h1>Receipt Tracker PWA</h1>
-
-    <div class="api-key-section">
-      <label for="apiKey"><strong>Gemini API Key:</strong></label>
-      <input type="password" id="apiKey" placeholder="Enter your Gemini API key here">
-    </div>
-
-    <div class="action-bar">
-      <button class="btn btn-success" onclick="document.getElementById('cameraInput').click()">📸 Camera</button>
-      <button class="btn btn-primary" onclick="document.getElementById('albumInput').click()">🖼️ Album</button>
-      <input type="file" id="cameraInput" accept="image/*" capture="environment" onchange="processReceipts(this.files)">
-      <input type="file" id="albumInput" accept="image/*" multiple onchange="processReceipts(this.files)">
-    </div>
-
-    <div class="action-bar">
-      <button class="btn btn-secondary" onclick="newSession()">New</button>
-      <button class="btn btn-secondary" onclick="openBackup()">Open</button>
-      <button class="btn btn-secondary" onclick="saveBackup()">Save</button>
-      <button class="btn btn-warning" onclick="exportData()">📊 Export CSV</button>
-      <button class="btn btn-danger" onclick="closeApp()">Close</button>
-      <input type="file" id="openFileInput" accept=".json" onchange="loadBackupFile(this.files[0])">
-    </div>
-
-    <div id="status" class="status">Ready (v1.3)</div>
-
-    <div class="table-container" style="margin-top: 16px;">
-      <table>
-        <thead>
-          <tr>
-            <th>Txn Date</th>
-            <th>Merchant</th>
-            <th>Gasoline</th>
-            <th>Home Maint</th>
-            <th>Medicine</th>
-            <th>Transit</th>
-            <th>Other</th>
-          </tr>
-        </thead>
-        <tbody id="ledgerBody">
-        </tbody>
-        <tfoot>
-          <tr>
-            <td colspan="2">TOTAL</td>
-            <td id="sumGas">$0.00</td>
-            <td id="sumHome">$0.00</td>
-            <td id="sumMed">$0.00</td>
-            <td id="sumTransit">$0.00</td>
-            <td id="sumOther">$0.00</td>
-          </tr>
-        </tfoot>
-      </table>
-    </div>
-  </div>
-
   <script>
     let receipts = [];
 
@@ -229,7 +71,8 @@
     }
 
     async function analyzeWithGemini(apiKey, base64Image) {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+      // Updated back to the required gemini-3.8-flash model endpoint
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${apiKey}`;
       const prompt = `Analyze this receipt image. Locate the transaction date (format YYYY-MM-DD), merchant name, and the exact amount right next to the word TOTAL. Categorize into one of: "Gasoline", "Home Maintenance", "Medicine Purchase", "Public Transit", or "Other". Respond STRICTLY with valid JSON containing key names: "date", "merchant", "category", "amount". Example: {"date":"2026-10-09","merchant":"Shell","category":"Gasoline","amount":45.50}`;
 
       const response = await fetch(url, {
@@ -305,7 +148,6 @@
       }
     }
 
-    // Save backup defaulting to Downloads folder and filtering/accepting only .json files
     async function saveBackup() {
       const dataStr = JSON.stringify(receipts, null, 2);
       
@@ -330,7 +172,6 @@
         }
       }
 
-      // Fallback for older browsers
       const blob = new Blob([dataStr], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const downloadAnchor = document.createElement('a');
@@ -343,7 +184,6 @@
       document.getElementById('status').innerText = "Backup downloaded.";
     }
 
-    // Open backup defaulting directly into Downloads folder and showing strictly .json files
     async function openBackup() {
       if (window.showOpenFilePicker) {
         try {
@@ -368,7 +208,6 @@
         }
       }
 
-      // Fallback to standard file input (pre-filtered for .json)
       document.getElementById('openFileInput').click();
     }
 
@@ -388,20 +227,18 @@
       reader.readAsText(file);
     }
 
-    // Export table data to a CSV file (compatible with Excel) saved to Downloads
     async function exportData() {
       if (receipts.length === 0) {
         alert("No receipt data to export.");
         return;
       }
 
-      // Build CSV headers and rows matching the table view
       let csvContent = "Txn Date,Merchant,Gasoline,Home Maint,Medicine,Transit,Other\r\n";
       
       receipts.forEach(item => {
         const amt = parseFloat(item.amount) || 0;
         const date = item.date || 'N/A';
-        const merchant = `"${(item.merchant || 'Unknown').replace(/"/g, '""')}"`; // Escape quotes safely
+        const merchant = `"${(item.merchant || 'Unknown').replace(/"/g, '""')}"`;
         
         const gas = item.category === 'Gasoline' ? amt.toFixed(2) : '';
         const home = item.category === 'Home Maintenance' ? amt.toFixed(2) : '';
@@ -433,7 +270,6 @@
         }
       }
 
-      // Fallback download for CSV
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       const downloadAnchor = document.createElement('a');
@@ -453,5 +289,3 @@
       }
     }
   </script>
-</body>
-</html>
