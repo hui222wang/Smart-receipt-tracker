@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Smart Receipt Tracker PWA</title>
+  <title>Smart Receipt Tracker PWA v1.1</title>
   <link rel="manifest" href="manifest.json">
   <style>
     :root {
@@ -123,7 +123,7 @@
       <input type="file" id="openFileInput" accept=".json" onchange="loadBackupFile(this.files[0])">
     </div>
 
-    <div id="status" class="status">Ready</div>
+    <div id="status" class="status">Ready (v1.1)</div>
 
     <div class="table-container" style="margin-top: 16px;">
       <table>
@@ -287,7 +287,7 @@
     }
 
     function newSession() {
-      if (confirm("Are you sure you want to clear current receipts and start a new session?")) {
+      if (confirm("Are you sure you want to current receipts and start a new session?")) {
         receipts = [];
         saveToLocalStorage();
         renderTable();
@@ -328,7 +328,7 @@
     function closeApp() {
       if (confirm("Are you sure you want to close this session?")) {
         window.close();
-        document.getElementById('status').innerText = "Session closed. You can close this tab.";
+        document.getElementById('status').innerText = "Session closed.";
       }
     }
   </script>
